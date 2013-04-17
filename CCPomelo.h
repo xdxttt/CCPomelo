@@ -1,13 +1,11 @@
 //
-//  ProtocolHandler.h
-//  Ragnarok Battle Online
 //
 //  Created by xudexin on 13-4-17.
 //
 //
 
-#ifndef __Ragnarok_Battle_Online__CCPomelo__
-#define __Ragnarok_Battle_Online__CCPomelo__
+#ifndef __CCPomelo__
+#define __CCPomelo__
 
 #include "cocos2d.h"
 #include "jansson.h"
@@ -43,4 +41,4 @@ private:
 
 };
 
-#endif /* defined(__Ragnarok_Battle_Online__CCPomelo__) */
+#endif /* defined(__CCPomelo__) */

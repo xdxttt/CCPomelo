@@ -1,6 +1,4 @@
 //
-//  ProtocolHandler.cpp
-//  Ragnarok Battle Online
 //
 //  Created by xudexin on 13-4-17.
 //
