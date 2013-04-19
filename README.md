@@ -12,25 +12,22 @@ CCPomelo  v0.0.2
 
 expmale:
 
-//
-
-   *** 省略上文
-
-   CCPomelo* ccpml = CCPomelo::getInstance();
-    if(ccpml->connect(ip, port)) {
-        CCLog("fail to connect server.\n");
-    }else{
-        // compose request
+*** 省略上文
+    
+    
+    CCPomelo* ccpml = CCPomelo::getInstance();
+      if(ccpml->connect(ip, port)) {
+           CCLog("fail to connect server.\n");
+      }else{
         const char *route = "connector.connectorHandler.enter";
         json_t *msg = json_object();
         json_t *str = json_string("hellopemole");
         json_object_set(msg, "account", str);
         json_decref(str);
-
+       
         ccpml->request(route, msg, this,  callfuncND_selector(HelloWorld::requestCB));
-        
+       
         ccpml->addListener("onHey",this,  callfuncND_selector(HelloWorld::on_hey));
-
         
         route = "connector.connectorHandler.notify";
         msg = json_object();
@@ -39,15 +36,26 @@ expmale:
         json_decref(json_str);
         ccpml->notify(route,msg, this, callfuncND_selector(HelloWorld::notifyCB));
     }
-     *** 省略下文
-//
+    
+    
+    
+*** 省略下文
+
+*** 回调函数
 
 
-//
     void HelloWorld::requestCB(cocos2d::CCNode *node, void *resp){
         CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
     }
-//
+    void HelloWorld::notifyCB(cocos2d::CCNode *node, void *notify){
+        CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)notify;
+    }
+    void HelloWorld::on_hey(cocos2d::CCNode *node, void *event){
+        CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)event;
+    }
+
+
+
 
 
 注：
