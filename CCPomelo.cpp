@@ -1,11 +1,12 @@
 //
+//  ProtocolHandler.cpp
+//  Ragnarok Battle Online
 //
 //  Created by xudexin on 13-4-17.
 //
 //
 
 #include "CCPomelo.h"
-#include<queue>
 
 class CCRequestContent {
 public:
@@ -32,68 +33,78 @@ public:
 class CCEvent_ {
 public:
     CCEvent_(){
-        event = NULL;
         docs = NULL;
     }
     ~CCEvent_(){
         
     }
     int status;
-    const char* event;
+    std::string event;
     json_t *docs;
 };
-
+class CCNotiyf_ {
+public:
+    CCNotiyf_(){
+        notify = NULL;
+    }
+    ~CCNotiyf_(){
+        
+    }
+    int status;
+    pc_notify_t *notify;
+};
 
 static CCPomelo *s_CCPomelo = NULL; // pointer to singleton
 
-
-std::map<pc_request_t *,CCRequestContent*> s_request_map;
-std::queue<CCReponse_*> s_reponse_queue;
-pthread_mutex_t  s_reponse_queue_mutex;
-
-
-std::map<std::string,CCRequestContent*> s_event_map;
-pthread_mutex_t  s_event_queue_mutex;
-std::queue<CCEvent_*> s_event_queue;
+void cc_pomelo_on_notify_cb(pc_notify_t *ntf, int status){
+    
+    s_CCPomelo->lockNotifyQeueue();
+    
+    CCNotiyf_ *notify = new CCNotiyf_;
+    notify->notify = ntf;
+    notify->status = status;
+    
+    s_CCPomelo->pushNotiyf(notify);
+    
+    s_CCPomelo->unlockNotifyQeueue();
+}
 
 
 void cc_pomelo_on_event_cb(pc_client_t *client, const char *event, void *data) {
-    json_t *docs = (json_t *)data;
     
-    pthread_mutex_lock(&s_event_queue_mutex);
+    s_CCPomelo->lockEventQeueue();
     
     CCEvent_ *ev = new CCEvent_;
     ev->event = event;
-    ev->docs = docs;
-    json_incref(docs);
-    s_event_queue.push(ev);
+    ev->docs = (json_t *)data;
+    json_incref(ev->docs);
     
-    pthread_mutex_unlock(&s_event_queue_mutex);
-    CCDirector::sharedDirector()->getScheduler()->resumeTarget(s_CCPomelo);
+    s_CCPomelo->pushEvent(ev);
+    
+    s_CCPomelo->unlockEventQeueue();
+    
 }
 
 void cc_pomelo_on_request_cb(pc_request_t *req, int status, json_t *docs) {
     
-    pthread_mutex_lock(&s_reponse_queue_mutex);
+    s_CCPomelo->lockReponsQeueue();
     
     CCReponse_ *response = new CCReponse_;
     response->req = req;
     response->status = status;
     response->docs = docs;
     json_incref(docs);
-    s_reponse_queue.push(response);
     
-    pthread_mutex_unlock(&s_reponse_queue_mutex);
-    CCDirector::sharedDirector()->getScheduler()->resumeTarget(s_CCPomelo);
+    s_CCPomelo->pushReponse(response);
+    
+    s_CCPomelo->unlockReponsQeueue();
+    
 }
-void CCPomelo::dispatchCallbacks(float delta){
-    
-    pthread_mutex_lock(&s_reponse_queue_mutex);
-    if (s_reponse_queue.size()>0) {
-        CCReponse_ *response = s_reponse_queue.front();
-        s_reponse_queue.pop();
-        
-        CCRequestContent * content = s_request_map[response->req];
+void CCPomelo::dispatchRequest(){
+    lockReponsQeueue();
+    CCReponse_ *response = popReponse();
+    if (response) {
+        CCRequestContent * content = request_content[response->req];
         if (content) {
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
@@ -108,20 +119,17 @@ void CCPomelo::dispatchCallbacks(float delta){
             CCLog("Lost request content");
         }
         json_decref(response->docs);
-        s_request_map.erase(response->req);
+        request_content.erase(response->req);
         pc_request_destroy(response->req);
         delete response;
     }
-    pthread_mutex_unlock(&s_reponse_queue_mutex);
-    
-    
-    // 
-    pthread_mutex_lock(&s_event_queue_mutex);
-    if (s_reponse_queue.size()>0) {
-        CCEvent_ *event = s_event_queue.front();
-        s_event_queue.pop();
-        
-        CCRequestContent * content = s_event_map[event->event];
+    unlockReponsQeueue();
+}
+void CCPomelo::dispatchEvent(){
+    lockEventQeueue();
+    CCEvent_ *event = popEvent();
+    if (event) {
+        CCRequestContent * content = event_content[event->event];
         if (content) {
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
@@ -133,32 +141,75 @@ void CCPomelo::dispatchCallbacks(float delta){
                 (pTarget->*pSelector)((CCNode *)this,&resp);
             }
         }else{
-            CCLog("Lost event content");
+            CCLog("Lost event %s content",event->event.c_str());
         }
         json_decref(event->docs);
         delete event;
     }
-    pthread_mutex_unlock(&s_event_queue_mutex);
+    unlockEventQeueue();
+}
+void CCPomelo::dispatchNotify(){
+    lockNotifyQeueue();
+    CCNotiyf_ *ntf = popNotify();
+    if (ntf) {
+        CCRequestContent * content = NULL;
+        if (notify_content.find(ntf->notify)!=notify_content.end()) {
+            content = notify_content[ntf->notify];
+        }
+        if (content) {
+            CCObject *pTarget = content->pTarget;
+            SEL_CallFuncND pSelector = content->pSelector;
+            if (pTarget && pSelector)
+            {
+                CCPomeloReponse resp;
+                resp.status = 0;
+                resp.docs = NULL;
+                (pTarget->*pSelector)((CCNode *)this,&resp);
+            }
+        }else{
+            CCLog("Lost event content");
+        }
+        notify_content.erase(ntf->notify);
+        pc_notify_destroy(ntf->notify);
+        delete ntf;
+    }
+    unlockNotifyQeueue();
+}
+void CCPomelo::dispatchCallbacks(float delta){
+    dispatchNotify();
+    dispatchEvent();
+    dispatchRequest();
+    
+    pthread_mutex_lock(&task_count_mutex);
+    
+    
+    if (task_count==0) {
+        CCDirector::sharedDirector()->getScheduler()->pauseTarget(this);
+    }
+    pthread_mutex_unlock(&task_count_mutex);
     
 }
 
 CCPomelo::CCPomelo(){
     CCDirector::sharedDirector()->getScheduler()->scheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), this, 0, false);
     CCDirector::sharedDirector()->getScheduler()->pauseTarget(this);
-
     client = pc_client_new();
-    pthread_mutex_init(&s_reponse_queue_mutex, NULL);
-    pthread_mutex_init(&s_event_queue_mutex, NULL);
+    pthread_mutex_init(&reponse_queue_mutex, NULL);
+    pthread_mutex_init(&event_queue_mutex, NULL);
+    pthread_mutex_init(&notify_queue_mutex, NULL);
+    pthread_mutex_init(&task_count_mutex, NULL);
 
     
+    task_count = 0;
 }
 CCPomelo::~CCPomelo(){
-    
+    CCDirector::sharedDirector()->getScheduler()->unscheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), s_CCPomelo);
 }
 void CCPomelo::destroyInstance()
 {
-    CCDirector::sharedDirector()->getScheduler()->unscheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), s_CCPomelo);
-    s_CCPomelo->release();
+    if (s_CCPomelo) {
+        s_CCPomelo->release();
+    }
 }
 
 CCPomelo* CCPomelo::getInstance()
@@ -187,15 +238,19 @@ int CCPomelo::request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFu
     CCRequestContent *content = new CCRequestContent;
     content->pTarget = pTarget;
     content->pSelector = pSelector;
-    s_request_map[req] = content;
+    request_content[req] = content;
     pc_request(client,req, route, msg, cc_pomelo_on_request_cb);
     return 0;
 }
 
 int CCPomelo::notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector){
     
-    
-    //pc_add_listener(client, "onHey", on_hey);
+    pc_notify_t *notify = pc_notify_new();
+    CCRequestContent *content = new CCRequestContent;
+    content->pTarget = pTarget;
+    content->pSelector = pSelector;
+    notify_content[notify] = content;
+    pc_notify(client,notify, route, msg, cc_pomelo_on_notify_cb);
     
     return 0;
 }
@@ -206,7 +261,85 @@ int CCPomelo::addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pS
     content->pTarget = pTarget;
     content->pSelector = pSelector;
     
-    s_event_map[event] = content;
+    event_content[event] = content;
     
     return pc_add_listener(client, event, cc_pomelo_on_event_cb);
 }
+void CCPomelo::incTaskCount(){
+    pthread_mutex_lock(&task_count_mutex);
+    task_count++;
+    pthread_mutex_unlock(&task_count_mutex);
+    CCDirector::sharedDirector()->getScheduler()->resumeTarget(s_CCPomelo);
+}
+void CCPomelo::desTaskCount(){
+    pthread_mutex_lock(&task_count_mutex);
+    task_count--;
+    pthread_mutex_unlock(&task_count_mutex);
+}
+
+void CCPomelo::lockReponsQeueue(){
+    pthread_mutex_lock(&reponse_queue_mutex);
+}
+
+void CCPomelo::unlockReponsQeueue(){
+    pthread_mutex_unlock(&reponse_queue_mutex);
+}
+
+void CCPomelo::lockEventQeueue(){
+    pthread_mutex_lock(&event_queue_mutex);
+}
+
+void CCPomelo::unlockEventQeueue(){
+    pthread_mutex_unlock(&event_queue_mutex);
+}
+
+void CCPomelo::lockNotifyQeueue(){
+    pthread_mutex_lock(&notify_queue_mutex);
+}
+
+void CCPomelo::unlockNotifyQeueue(){
+    pthread_mutex_unlock(&notify_queue_mutex);
+}
+void CCPomelo::pushReponse(CCReponse_*response){
+    reponse_queue.push(response);
+    incTaskCount();
+}
+void CCPomelo::pushEvent(CCEvent_* event){
+    event_queue.push(event);
+    incTaskCount();
+}
+void CCPomelo::pushNotiyf(CCNotiyf_*notify){
+    notify_queue.push(notify);
+    incTaskCount();
+}
+CCReponse_*CCPomelo::popReponse(){
+    if (reponse_queue.size()>0) {
+        CCReponse_ *response = reponse_queue.front();
+        reponse_queue.pop();
+        desTaskCount();
+        return  response;
+    }else{
+        return  NULL;
+    }
+}
+CCEvent_*CCPomelo::popEvent(){
+    if (event_queue.size()>0) {
+        CCEvent_ *event = event_queue.front();
+        event_queue.pop();
+        desTaskCount();
+        return  event;
+    }else{
+        return  NULL;
+    }
+}
+CCNotiyf_*CCPomelo::popNotify(){
+    if (notify_queue.size()>0) {
+        CCNotiyf_ *ntf = notify_queue.front();
+        notify_queue.pop();
+        desTaskCount();
+        return  ntf;
+    }else{
+        return  NULL;
+    }
+}
+
