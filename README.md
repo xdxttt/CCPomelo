@@ -12,7 +12,7 @@ CCPomelo  v0.0.2
 
 expmale:
 
-//-------- 使用例子
+//
 
    *** 省略上文
 
@@ -40,15 +40,14 @@ expmale:
         ccpml->notify(route,msg, this, callfuncND_selector(HelloWorld::notifyCB));
     }
      *** 省略下文
-//--------
+//
 
 
-//-------- 回调函数例子
+//
     void HelloWorld::requestCB(cocos2d::CCNode *node, void *resp){
         CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
-
     }
-//-------- 
+//
 
 
 注：
