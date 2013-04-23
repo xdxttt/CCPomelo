@@ -14,15 +14,17 @@
 
 using namespace cocos2d;
 
-class CCRequestContent;
-class CCReponse_;
-class CCEvent_ ;
-class CCNotiyf_;
+class CCPomeloContent_;
+class CCPomeloReponse_;
+class CCPomeloEvent_ ;
+class CCPomeloNotify_;
 
-class CCPomeloReponse{
+class CCPomeloReponse:public cocos2d::CCObject{
 public:
     CCPomeloReponse(){}
     ~CCPomeloReponse(){}
+    const char* rout;
+    
     int status;
     json_t *docs;
 };
@@ -33,17 +35,17 @@ public:
     static void destroyInstance();
     
     int connect(const char* addr,int port);
+   
     int request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector);
- 
     
 public:
     CCPomelo();
     virtual ~CCPomelo();
     void dispatchCallbacks(float delta);
     
-
+    
     
     void lockReponsQeueue();
     void unlockReponsQeueue();
@@ -52,31 +54,31 @@ public:
     void lockNotifyQeueue();
     void unlockNotifyQeueue();
     
-    void pushReponse(CCReponse_*resp);
-    void pushEvent(CCEvent_*ev);
-    void pushNotiyf(CCNotiyf_*ntf);
-
+    void pushReponse(CCPomeloReponse_*resp);
+    void pushEvent(CCPomeloEvent_*ev);
+    void pushNotiyf(CCPomeloNotify_*ntf);
+    
     
 private:
     void incTaskCount();
     void desTaskCount();
     
-    CCReponse_*popReponse();
-    CCEvent_*popEvent();
-    CCNotiyf_*popNotify();
+    CCPomeloReponse_*popReponse();
+    CCPomeloEvent_*popEvent();
+    CCPomeloNotify_*popNotify();
     
-    std::map<pc_notify_t*,CCRequestContent*> notify_content;
+    std::map<pc_notify_t*,CCPomeloContent_*> notify_content;
     pthread_mutex_t  notify_queue_mutex;
-    std::queue<CCNotiyf_*> notify_queue;
-
-    std::map<std::string,CCRequestContent*> event_content;
+    std::queue<CCPomeloNotify_*> notify_queue;
+    
+    std::map<std::string,CCPomeloContent_*> event_content;
     pthread_mutex_t  event_queue_mutex;
-    std::queue<CCEvent_*> event_queue;
-
-    std::map<pc_request_t *,CCRequestContent*> request_content;
+    std::queue<CCPomeloEvent_*> event_queue;
+    
+    std::map<pc_request_t *,CCPomeloContent_*> request_content;
     pthread_mutex_t  reponse_queue_mutex;
-    std::queue<CCReponse_*> reponse_queue;
-
+    std::queue<CCPomeloReponse_*> reponse_queue;
+    
     pthread_mutex_t  task_count_mutex;
     void dispatchRequest();
     void dispatchEvent();
