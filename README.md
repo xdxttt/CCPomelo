@@ -12,7 +12,7 @@ CCPomelo  v0.0.2
 
 expmale:
 
-<<<<<<< HEAD
+
 *** 省略上文
     
     
@@ -20,15 +20,7 @@ expmale:
       if(ccpml->connect(ip, port)) {
            CCLog("fail to connect server.\n");
       }else{
-=======
 
-   *** 省略上文
-   CCPomelo* ccpml = CCPomelo::getInstance();
-    if(ccpml->connect(ip, port)) {
-        CCLog("fail to connect server.\n");
-    }else{
-        // compose request
->>>>>>> 日常提交
         const char *route = "connector.connectorHandler.enter";
         json_t *msg = json_object();
         json_t *str = json_string("hellopemole");
@@ -46,22 +38,20 @@ expmale:
         json_decref(json_str);
         ccpml->notify(route,msg, this, callfuncND_selector(HelloWorld::notifyCB));
     }
-<<<<<<< HEAD
     
-    
-    
+
 *** 省略下文
 
 *** 回调函数
-=======
-     *** 省略下文
->>>>>>> 日常提交
+
+
+
 
 
     void HelloWorld::requestCB(cocos2d::CCNode *node, void *resp){
         CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
     }
-<<<<<<< HEAD
+
     void HelloWorld::notifyCB(cocos2d::CCNode *node, void *notify){
         CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)notify;
     }
@@ -69,8 +59,7 @@ expmale:
         CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)event;
     }
 
-=======
->>>>>>> 日常提交
+
 
 
 
