@@ -115,6 +115,7 @@ void CCPomelo::dispatchRequest(){
             request_content.erase(response->request);
         }
         if (content) {
+            if (log_level>0)
             CCLog("dispatch response:\r\nevent:%s\r\nmsg:%s\r\nstatus:%d\r\ndocs:%s\r\n",response->request->route,json_dumps(response->request->msg,0),response->status,json_dumps(response->docs,0));
             
             CCObject *pTarget = content->pTarget;
@@ -145,7 +146,9 @@ void CCPomelo::dispatchEvent(){
             content = event_content[event->event];
         }
         if (content) {
+            if (log_level>0)
             CCLog("dispatch event:\r\nevent:%s\r\nmsg:%s\r\nstatus:%d\r\n",event->event.c_str(),json_dumps(event->docs,0),event->status);
+          
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
             if (pTarget && pSelector)
@@ -157,7 +160,6 @@ void CCPomelo::dispatchEvent(){
             }
         }else{
             CCLog("dispatch event::\r\n lost %s content",event->event.c_str());
-            
         }
         json_decref(event->docs);
         delete event;
@@ -174,7 +176,9 @@ void CCPomelo::dispatchNotify(){
             notify_content.erase(ntf->notify);
         }
         if (content) {
-            CCLog("dispatch notify:\r\nroute:%s\r\nmsg:%s\r\nstatus:%d\r\n",ntf->notify->route,json_dumps(ntf->notify->msg, 0),ntf->status);
+            if (log_level>0) {
+                CCLog("dispatch notify:\r\nroute:%s\r\nmsg:%s\r\nstatus:%d\r\n",ntf->notify->route,json_dumps(ntf->notify->msg, 0),ntf->status);
+            }
 
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
@@ -215,7 +219,7 @@ CCPomelo::CCPomelo(){
     pthread_mutex_init(&event_queue_mutex, NULL);
     pthread_mutex_init(&notify_queue_mutex, NULL);
     pthread_mutex_init(&task_count_mutex, NULL);
-    
+    log_level = 0;
     task_count = 0;
 }
 CCPomelo::~CCPomelo(){
@@ -257,12 +261,13 @@ int CCPomelo::connect(const char* addr,int port){
     return ret;
 }
 int CCPomelo::request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector){
+    
     pc_request_t *req   = pc_request_new();
     CCPomeloContent_ *content = new CCPomeloContent_;
     content->pTarget = pTarget;
     content->pSelector = pSelector;
     request_content[req] = content;
-    pc_request(client,req, route, msg, cc_pomelo_on_request_cb);
+    pc_request(client,req, route, json_deep_copy(msg), cc_pomelo_on_request_cb);
     return 0;
 }
 
@@ -273,13 +278,12 @@ int CCPomelo::notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFun
     content->pTarget = pTarget;
     content->pSelector = pSelector;
     notify_content[notify] = content;
-    pc_notify(client,notify, route, msg, cc_pomelo_on_notify_cb);
+    pc_notify(client,notify, route, json_deep_copy(msg), cc_pomelo_on_notify_cb);
     
     return 0;
 }
 
 int CCPomelo::addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector){
-    
     CCPomeloContent_ *content = new CCPomeloContent_;
     content->pTarget = pTarget;
     content->pSelector = pSelector;
@@ -336,6 +340,10 @@ void CCPomelo::pushNotiyf(CCPomeloNotify_*notify){
     notify_queue.push(notify);
     incTaskCount();
 }
+void CCPomelo::setLogLevel(int logLevel){
+     this->log_level = logLevel;
+}
+
 CCPomeloReponse_*CCPomelo::popReponse(){
     if (reponse_queue.size()>0) {
         CCPomeloReponse_ *response = reponse_queue.front();

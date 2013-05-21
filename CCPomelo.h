@@ -24,7 +24,6 @@ public:
     CCPomeloReponse(){}
     ~CCPomeloReponse(){}
     const char* rout;
-    
     int status;
     json_t *docs;
 };
@@ -35,16 +34,17 @@ public:
     static void destroyInstance();
     
     int connect(const char* addr,int port);
-   
     int request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector);
     
+    void setLogLevel(int logLevel);
+
 public:
     CCPomelo();
     virtual ~CCPomelo();
-    void dispatchCallbacks(float delta);
     
+    void dispatchCallbacks(float delta);
     
     
     void lockReponsQeueue();
@@ -57,7 +57,6 @@ public:
     void pushReponse(CCPomeloReponse_*resp);
     void pushEvent(CCPomeloEvent_*ev);
     void pushNotiyf(CCPomeloNotify_*ntf);
-    
     
 private:
     void incTaskCount();
@@ -85,6 +84,7 @@ private:
     void dispatchNotify();
     pc_client_t *client;
     int task_count;
+    int log_level;
 };
 
 #endif /* defined(__CCPomelo__) */
