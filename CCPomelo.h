@@ -19,6 +19,8 @@ class CCPomeloContent_;
 class CCPomeloReponse_;
 class CCPomeloEvent_ ;
 class CCPomeloNotify_;
+class CCPomeloConnect_;
+
 
 class CCPomeloReponse:public cocos2d::CCObject{
 public:
@@ -34,15 +36,17 @@ public:
     static CCPomelo *getInstance();
     static void destroyInstance();
     
+    
     int connect(const char* addr,int port);
+    
+    void asyncConnect(const char* addr,int port,CCObject* pTarget, SEL_CallFuncND pSelector);
+
     void stop();
 
     int request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector);
     
-    void setLogLevel(int logLevel);
-
 public:
     CCPomelo();
     virtual ~CCPomelo();
@@ -57,10 +61,15 @@ public:
     void lockNotifyQeueue();
     void unlockNotifyQeueue();
     
+    void lockConnectContent();
+    void unlockConnectContent();
+    
+    
     void pushReponse(CCPomeloReponse_*resp);
     void pushEvent(CCPomeloEvent_*ev);
     void pushNotiyf(CCPomeloNotify_*ntf);
-    
+    void connectCallBack(int status);
+
 private:
     void incTaskCount();
     void desTaskCount();
@@ -81,13 +90,19 @@ private:
     pthread_mutex_t  reponse_queue_mutex;
     std::queue<CCPomeloReponse_*> reponse_queue;
     
+    
+    pthread_mutex_t  connect_mutex;
+    CCPomeloConnect_* connect_content;
+    
+    
     pthread_mutex_t  task_count_mutex;
     void dispatchRequest();
     void dispatchEvent();
     void dispatchNotify();
+    void connectCallBack();
     pc_client_t *client;
     int task_count;
-    int log_level;
+    int connect_status;
 };
 
 #endif /* defined(__CCPomelo__) */

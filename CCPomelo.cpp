@@ -9,7 +9,6 @@
 #include "CCPomelo.h"
 #include <errno.h>
 
-
 class CCPomeloContent_ {
 public:
     CCPomeloContent_(){
@@ -59,7 +58,27 @@ public:
     pc_notify_t *notify;
 };
 
+class CCPomeloConnect_ {
+public:
+    CCPomeloConnect_(){
+        req = NULL;
+    }
+    ~CCPomeloConnect_(){
+        
+    }
+    int status;
+    pc_connect_t *req;
+    CCPomeloContent_ *content;
+};
+
 static CCPomelo *s_CCPomelo = NULL; // pointer to singleton
+
+void   cc_pomelo_on_ansync_connect_cb  (pc_connect_t* conn_req, int status){
+    //CCLOG("data = %p\n", conn_req->data);
+    pc_connect_req_destroy(conn_req);
+    s_CCPomelo->connectCallBack(status);
+
+}
 
 void cc_pomelo_on_notify_cb(pc_notify_t *ntf, int status){
     
@@ -115,8 +134,6 @@ void CCPomelo::dispatchRequest(){
             request_content.erase(response->request);
         }
         if (content) {
-            if (log_level>0)
-            CCLog("dispatch response:\r\nevent:%s\r\nmsg:%s\r\nstatus:%d\r\ndocs:%s\r\n",response->request->route,json_dumps(response->request->msg,0),response->status,json_dumps(response->docs,0));
             
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
@@ -128,7 +145,7 @@ void CCPomelo::dispatchRequest(){
                 (pTarget->*pSelector)((CCNode *)this,&resp);
             }
         }else{
-            CCLog("dispatch response:\r\nlost content");
+            CCLOG("dispatch response:\r\nlost content");
         }
         json_decref(response->docs);
         json_decref(response->request->msg);
@@ -146,20 +163,17 @@ void CCPomelo::dispatchEvent(){
             content = event_content[event->event];
         }
         if (content) {
-            if (log_level>0)
-            CCLog("dispatch event:\r\nevent:%s\r\nmsg:%s\r\nstatus:%d\r\n",event->event.c_str(),json_dumps(event->docs,0),event->status);
-          
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
             if (pTarget && pSelector)
             {
                 CCPomeloReponse resp;
-                resp.status = 0;
+                resp.status = event->status;
                 resp.docs = event->docs;
                 (pTarget->*pSelector)((CCNode *)this,&resp);
             }
         }else{
-            CCLog("dispatch event::\r\n lost %s content",event->event.c_str());
+            CCLOG("dispatch event::\r\n lost %s content",event->event.c_str());
         }
         json_decref(event->docs);
         delete event;
@@ -176,21 +190,17 @@ void CCPomelo::dispatchNotify(){
             notify_content.erase(ntf->notify);
         }
         if (content) {
-            if (log_level>0) {
-                CCLog("dispatch notify:\r\nroute:%s\r\nmsg:%s\r\nstatus:%d\r\n",ntf->notify->route,json_dumps(ntf->notify->msg, 0),ntf->status);
-            }
-
             CCObject *pTarget = content->pTarget;
             SEL_CallFuncND pSelector = content->pSelector;
             if (pTarget && pSelector)
             {
                 CCPomeloReponse resp;
-                resp.status = 0;
+                resp.status = ntf->status;
                 resp.docs = NULL;
                 (pTarget->*pSelector)((CCNode *)this,&resp);
             }
         }else{
-            CCLog("dispatch notify:\r\nlost content");
+            CCLOG("dispatch notify:\r\nlost content");
         }
         json_decref(ntf->notify->msg);
         pc_notify_destroy(ntf->notify);
@@ -198,10 +208,33 @@ void CCPomelo::dispatchNotify(){
     }
     unlockNotifyQeueue();
 }
+
+void CCPomelo::connectCallBack(){
+    if (connect_content) {
+        CCObject *pTarget = connect_content->content->pTarget;
+        SEL_CallFuncND pSelector = connect_content->content->pSelector;
+        if (pTarget && pSelector)
+        {
+            CCPomeloReponse resp;
+            resp.status = connect_content->status;
+            resp.docs = NULL;
+            (pTarget->*pSelector)((CCNode *)this,&resp);
+        }
+        connect_status  = 0;
+        desTaskCount();
+        delete connect_content;
+        connect_content = NULL;
+    }
+   
+}
 void CCPomelo::dispatchCallbacks(float delta){
     dispatchNotify();
     dispatchEvent();
     dispatchRequest();
+    if (connect_status==1) {
+        connectCallBack();
+    }
+    
     pthread_mutex_lock(&task_count_mutex);
     
     if (task_count==0) {
@@ -219,8 +252,10 @@ CCPomelo::CCPomelo(){
     pthread_mutex_init(&event_queue_mutex, NULL);
     pthread_mutex_init(&notify_queue_mutex, NULL);
     pthread_mutex_init(&task_count_mutex, NULL);
-    log_level = 0;
+    pthread_mutex_init(&connect_mutex, NULL);
     task_count = 0;
+    connect_status = 0;
+    connect_content = NULL;
 }
 CCPomelo::~CCPomelo(){
     pc_client_destroy(client);
@@ -252,16 +287,50 @@ int CCPomelo::connect(const char* addr,int port){
     if (client) {
         client = pc_client_new();
     }else{
+        pc_client_stop(client);
         pc_client_destroy(client);
         client = pc_client_new();
     }
     int ret = pc_client_connect(client, &address);
     if(ret) {
-        CCLog("pc_client_connect error:%d",errno);
+        CCLOG("pc_client_connect error:%d",errno);
         pc_client_destroy(client);
     }
     return  ret;
 }
+void CCPomelo::asyncConnect(const char* addr,int port,CCObject* pTarget, SEL_CallFuncND pSelector){
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(struct sockaddr_in));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = inet_addr(addr);
+    
+    if (client) {
+        client = pc_client_new();
+    }else{
+        pc_client_stop(client);
+        pc_client_destroy(client);
+        client = pc_client_new();
+    }
+    
+    pc_connect_t* async = pc_connect_req_new(&address);
+    int ret = pc_client_connect2(client,async,cc_pomelo_on_ansync_connect_cb);
+    if(ret) {
+        CCLOG("pc_client_connect2 error:%d",errno);
+        pc_client_destroy(client);
+    }
+    if (!connect_content) {
+        connect_status = 0;
+        connect_content = new CCPomeloConnect_;
+        connect_content->content = new CCPomeloContent_;
+        connect_content->content->pTarget = pTarget;
+        connect_content->content->pSelector = pSelector;
+    }else{
+        CCLOG("can not call again before the first connect callback");
+    }
+}
+
+
 void CCPomelo::stop(){
     pc_client_stop(client);
 }
@@ -333,6 +402,13 @@ void CCPomelo::lockNotifyQeueue(){
 void CCPomelo::unlockNotifyQeueue(){
     pthread_mutex_unlock(&notify_queue_mutex);
 }
+void CCPomelo::lockConnectContent(){
+    pthread_mutex_unlock(&connect_mutex);
+}
+void CCPomelo::unlockConnectContent(){
+    pthread_mutex_unlock(&connect_mutex);
+}
+
 void CCPomelo::pushReponse(CCPomeloReponse_*response){
     reponse_queue.push(response);
     incTaskCount();
@@ -345,10 +421,12 @@ void CCPomelo::pushNotiyf(CCPomeloNotify_*notify){
     notify_queue.push(notify);
     incTaskCount();
 }
-void CCPomelo::setLogLevel(int logLevel){
-     this->log_level = logLevel;
-}
+void CCPomelo::connectCallBack(int status){
+    connect_status = 1;
+    connect_content->status = status;
+    incTaskCount();
 
+}
 CCPomeloReponse_*CCPomelo::popReponse(){
     if (reponse_queue.size()>0) {
         CCPomeloReponse_ *response = reponse_queue.front();
