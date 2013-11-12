@@ -223,11 +223,13 @@ CCPomelo::CCPomelo(){
     task_count = 0;
 }
 CCPomelo::~CCPomelo(){
+    pc_client_destroy(client);
     CCDirector::sharedDirector()->getScheduler()->unscheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), s_CCPomelo);
 }
 void CCPomelo::destroyInstance()
 {
     if (s_CCPomelo) {
+      
         s_CCPomelo->release();
     }
 }
