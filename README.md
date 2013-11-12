@@ -3,75 +3,32 @@ CCPomelo
 
 Libpomelo 的  cocos2d-x 封装类
 
-CCPomelo  v0.0.2
+CCPomelo  v0.0.3
 
 
 <br>
 1 结构上按照 cocos2d-x ext 中的 HttpClient 对象来做的。对于逻辑层来说是线程安全的。
 
 
-expmale:
+CCPomelo  v0.0.3 log
 
-
-*** 省略上文
-    
-    
-    CCPomelo* ccpml = CCPomelo::getInstance();
-      if(ccpml->connect(ip, port)) {
-           CCLog("fail to connect server.\n");
-      }else{
-
-        const char *route = "connector.connectorHandler.enter";
-        json_t *msg = json_object();
-        json_t *str = json_string("hellopemole");
-        json_object_set(msg, "account", str);
-        json_decref(str);
-       
-        ccpml->request(route, msg, this,  callfuncND_selector(HelloWorld::requestCB));
-       
-        ccpml->addListener("onHey",this,  callfuncND_selector(HelloWorld::on_hey));
-        
-        route = "connector.connectorHandler.notify";
-        msg = json_object();
-        json_t *json_str = json_string("hello");
-        json_object_set(msg, "msg", json_str);
-        json_decref(json_str);
-        ccpml->notify(route,msg, this, callfuncND_selector(HelloWorld::notifyCB));
-    }
-    
-
-*** 省略下文
-
-*** 回调函数
-
-
-
-
-
-    void HelloWorld::requestCB(cocos2d::CCNode *node, void *resp){
-        CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
-    }
-
-    void HelloWorld::notifyCB(cocos2d::CCNode *node, void *notify){
-        CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)notify;
-    }
-    void HelloWorld::on_hey(cocos2d::CCNode *node, void *event){
-        CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)event;
-    }
+添加了完整的基于 cocos2dx 的 chat expmale。
+例子基于 cocos2d-x 2.2 并且需要开发者自行配置 libpomelo环境 :) 
+例子对影 pomelo官方服务器例子程序：chatofpomelo-websocket（https://github.com/NetEase/chatofpomelo-websocket）
 
 
 
 
 
 
-注：
 
-是在使用cocos2d-x 加 pomelo 开发游戏的过程中顺带开发的这个类。
-只做了简单的测试（所有的功能都可用）。
-后续会随着游戏项目的进展持续维护这个类。
+运行 example 文件步骤：
+    1 建立一个 cocos2d-x 2.2版本的空项目。
+    2 用例子的的2个文件，替换掉空项目内的同名文件。
+    3 配置libpomelo 环境使项目通过编译（这块会稍微麻烦点，各位各显神通吧 ：） 我唯一遇到的问题就是libwebsocket.a好像有点问题，删除掉原来的重新引用就好了）
+    4 启动 chatofpomelo-websocket 
+    5 启动 例子 可在控制台看到 运行结果。
 
-第一个有价值的github项目。欢迎拍砖。
 
 
-代码风格豪放不羁。见谅~~
 
