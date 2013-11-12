@@ -246,19 +246,22 @@ int CCPomelo::connect(const char* addr,int port){
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     address.sin_addr.s_addr = inet_addr(addr);
+    
     if (client) {
         client = pc_client_new();
     }else{
         pc_client_destroy(client);
         client = pc_client_new();
     }
-    
     int ret = pc_client_connect(client, &address);
-    if (ret) {
+    if(ret) {
         CCLog("pc_client_connect error:%d",errno);
         pc_client_destroy(client);
     }
-    return ret;
+    return  ret;
+}
+void CCPomelo::stop(){
+    pc_client_stop(client);
 }
 int CCPomelo::request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector){
     

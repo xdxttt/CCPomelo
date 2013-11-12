@@ -8,6 +8,7 @@
 #define __CCPomelo__
 
 #include "cocos2d.h"
+
 #include "jansson.h"
 #include "pomelo.h"
 #include<queue>
@@ -34,6 +35,8 @@ public:
     static void destroyInstance();
     
     int connect(const char* addr,int port);
+    void stop();
+
     int request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector);
