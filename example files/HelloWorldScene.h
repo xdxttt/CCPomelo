@@ -12,6 +12,8 @@ public:
     // there's no 'id' in cpp, so we recommend returning the class instance pointer
     static cocos2d::CCScene* scene();
     
+    void connectCB(cocos2d::CCNode *node, void *resp);
+
     void queryEntryCB(cocos2d::CCNode *node, void *resp);
     void entryCB(cocos2d::CCNode *node, void *resp);
     void sendCB(cocos2d::CCNode *node, void *resp);

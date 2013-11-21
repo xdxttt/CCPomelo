@@ -124,6 +124,25 @@ void cc_pomelo_on_request_cb(pc_request_t *request, int status, json_t *docs) {
     s_CCPomelo->unlockReponsQeueue();
     
 }
+
+
+CCPomelo::CCPomelo(){
+    CCDirector::sharedDirector()->getScheduler()->scheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), this, 0, false);
+    CCDirector::sharedDirector()->getScheduler()->pauseTarget(this);
+    client = pc_client_new();
+    pthread_mutex_init(&reponse_queue_mutex, NULL);
+    pthread_mutex_init(&event_queue_mutex, NULL);
+    pthread_mutex_init(&notify_queue_mutex, NULL);
+    pthread_mutex_init(&task_count_mutex, NULL);
+    pthread_mutex_init(&connect_mutex, NULL);
+    task_count = 0;
+    connect_status = 0;
+    connect_content = NULL;
+}
+CCPomelo::~CCPomelo(){
+    CCDirector::sharedDirector()->getScheduler()->unscheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), s_CCPomelo);
+}
+
 void CCPomelo::dispatchRequest(){
     lockReponsQeueue();
     CCPomeloReponse_ *response = popReponse();
@@ -244,23 +263,6 @@ void CCPomelo::dispatchCallbacks(float delta){
     
 }
 
-CCPomelo::CCPomelo(){
-    CCDirector::sharedDirector()->getScheduler()->scheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), this, 0, false);
-    CCDirector::sharedDirector()->getScheduler()->pauseTarget(this);
-    client = pc_client_new();
-    pthread_mutex_init(&reponse_queue_mutex, NULL);
-    pthread_mutex_init(&event_queue_mutex, NULL);
-    pthread_mutex_init(&notify_queue_mutex, NULL);
-    pthread_mutex_init(&task_count_mutex, NULL);
-    pthread_mutex_init(&connect_mutex, NULL);
-    task_count = 0;
-    connect_status = 0;
-    connect_content = NULL;
-}
-CCPomelo::~CCPomelo(){
-    pc_client_destroy(client);
-    CCDirector::sharedDirector()->getScheduler()->unscheduleSelector(schedule_selector(CCPomelo::dispatchCallbacks), s_CCPomelo);
-}
 void CCPomelo::destroyInstance()
 {
     if (s_CCPomelo) {
@@ -284,13 +286,8 @@ int CCPomelo::connect(const char* addr,int port){
     address.sin_port = htons(port);
     address.sin_addr.s_addr = inet_addr(addr);
     
-    if (client) {
-        client = pc_client_new();
-    }else{
-        pc_client_stop(client);
-        pc_client_destroy(client);
-        client = pc_client_new();
-    }
+    client = pc_client_new();
+   
     int ret = pc_client_connect(client, &address);
     if(ret) {
         CCLOG("pc_client_connect error:%d",errno);
@@ -299,26 +296,7 @@ int CCPomelo::connect(const char* addr,int port){
     return  ret;
 }
 void CCPomelo::asyncConnect(const char* addr,int port,CCObject* pTarget, SEL_CallFuncND pSelector){
-    struct sockaddr_in address;
-    memset(&address, 0, sizeof(struct sockaddr_in));
-    address.sin_family = AF_INET;
-    address.sin_port = htons(port);
-    address.sin_addr.s_addr = inet_addr(addr);
-    
-    if (client) {
-        client = pc_client_new();
-    }else{
-        pc_client_stop(client);
-        pc_client_destroy(client);
-        client = pc_client_new();
-    }
-    
-    pc_connect_t* async = pc_connect_req_new(&address);
-    int ret = pc_client_connect2(client,async,cc_pomelo_on_ansync_connect_cb);
-    if(ret) {
-        CCLOG("pc_client_connect2 error:%d",errno);
-        pc_client_destroy(client);
-    }
+   
     if (!connect_content) {
         connect_status = 0;
         connect_content = new CCPomeloConnect_;
@@ -327,13 +305,66 @@ void CCPomelo::asyncConnect(const char* addr,int port,CCObject* pTarget, SEL_Cal
         connect_content->content->pSelector = pSelector;
     }else{
         CCLOG("can not call again before the first connect callback");
+        return ;
     }
+    
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(struct sockaddr_in));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = inet_addr(addr);
+    
+    client = pc_client_new();
+    pc_connect_t* async = pc_connect_req_new(&address);
+    int ret = pc_client_connect2(client,async,cc_pomelo_on_ansync_connect_cb);
+    if(ret) {
+        CCLOG("pc_client_connect2 error:%d",errno);
+        pc_client_destroy(client);
+    }
+
 }
 
 
 void CCPomelo::stop(){
-    pc_client_stop(client);
+    if(client){
+//      pc_client_stop(client);
+        pc_client_destroy(client);
+    }
 }
+void CCPomelo::cleanup(){
+    cleanupEventContent();
+    cleanupNotifyContent();
+    cleanupRequestContent();
+    pthread_mutex_lock(&task_count_mutex);
+    pthread_mutex_unlock(&task_count_mutex);
+}
+
+void CCPomelo::cleanupEventContent(){
+    std::map<std::string,CCPomeloContent_*>::iterator iter;
+    for (iter = event_content.begin();iter != event_content.end();iter++) {
+        CCPomeloContent_ *content = iter->second;
+        delete  content;
+        pc_remove_listener(client, iter->first.c_str(), cc_pomelo_on_event_cb);
+    }
+    event_content.clear();
+}
+void CCPomelo::cleanupNotifyContent(){
+    std::map<pc_notify_t*,CCPomeloContent_*>::iterator iter;
+    for (iter = notify_content.begin();iter != notify_content.end();iter++) {
+        CCPomeloContent_ *content = iter->second;
+        delete  content;
+    }
+    notify_content.clear();
+}
+void CCPomelo::cleanupRequestContent(){
+    std::map<pc_request_t *,CCPomeloContent_*>::iterator iter;
+    for (iter = request_content.begin();iter != request_content.end();iter++) {
+        CCPomeloContent_ *content = iter->second;
+        delete  content;
+    }
+    request_content.clear();
+}
+
 int CCPomelo::request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector){
     
     pc_request_t *req   = pc_request_new();
@@ -341,8 +372,7 @@ int CCPomelo::request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFu
     content->pTarget = pTarget;
     content->pSelector = pSelector;
     request_content[req] = content;
-    pc_request(client,req, route, json_deep_copy(msg), cc_pomelo_on_request_cb);
-    return 0;
+    return pc_request(client,req, route, json_deep_copy(msg), cc_pomelo_on_request_cb);
 }
 
 int CCPomelo::notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector){
@@ -352,11 +382,8 @@ int CCPomelo::notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFun
     content->pTarget = pTarget;
     content->pSelector = pSelector;
     notify_content[notify] = content;
-    pc_notify(client,notify, route, json_deep_copy(msg), cc_pomelo_on_notify_cb);
-    
-    return 0;
+    return pc_notify(client,notify, route, json_deep_copy(msg), cc_pomelo_on_notify_cb);
 }
-
 int CCPomelo::addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector){
     CCPomeloContent_ *content = new CCPomeloContent_;
     content->pTarget = pTarget;
@@ -366,6 +393,13 @@ int CCPomelo::addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pS
     }
     event_content[event] = content;
     return pc_add_listener(client, event, cc_pomelo_on_event_cb);
+}
+void CCPomelo::removeListener(const char *event){
+    if (event_content.find(event)!=event_content.end()) {
+        delete  event_content[event];
+    }
+    event_content.erase(event);
+    pc_remove_listener(client, event, cc_pomelo_on_event_cb);
 }
 void CCPomelo::incTaskCount(){
     pthread_mutex_lock(&task_count_mutex);
@@ -425,7 +459,6 @@ void CCPomelo::connectCallBack(int status){
     connect_status = 1;
     connect_content->status = status;
     incTaskCount();
-
 }
 CCPomeloReponse_*CCPomelo::popReponse(){
     if (reponse_queue.size()>0) {

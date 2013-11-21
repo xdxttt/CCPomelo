@@ -3,6 +3,9 @@
 USING_NS_CC;
 #include "CCPomelo.h"
 
+int global_count = 0;
+
+
 CCScene* HelloWorld::scene()
 {
     // 'scene' is an autorelease object
@@ -76,6 +79,22 @@ bool HelloWorld::init()
     std::string ip = "127.0.0.1";
     int port = 3014;
     
+    if (global_count%2==0) {
+        global_count++;
+        CCPomelo::getInstance()->stop();
+        CCPomelo::getInstance()->asyncConnect(ip.c_str(), port,this,  callfuncND_selector(HelloWorld::connectCB));
+    }else{
+        global_count++;
+        CCPomelo::getInstance()->addListener("onChat",this,  callfuncND_selector(HelloWorld::onChat));
+        
+        const char *route = "chat.chatHandler.send";
+        json_t *msg = json_object();
+        json_object_set(msg, "content", json_string("hello CCPomelo"));
+        json_object_set(msg, "target", json_string("*"));
+        CCPomelo::getInstance()->request(route, msg, this,  callfuncND_selector(HelloWorld::sendCB));
+    }
+
+    return true;
     
     if(CCPomelo::getInstance()->connect(ip.c_str(), port)) {
         // 这个略非主流。但是是延习libpomelo的 逻辑。by xdx
@@ -86,9 +105,19 @@ bool HelloWorld::init()
         json_object_set(msg, "uid", json_integer(1));
         CCPomelo::getInstance()->request(route, msg, this,  callfuncND_selector(HelloWorld::queryEntryCB));
     }
+    
     return true;
 }
+void HelloWorld::connectCB(cocos2d::CCNode *node, void *resp){
+    CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
+    CCLOG("connectCB %s",json_dumps(ccpomeloresp->docs,JSON_COMPACT));
 
+    const char *route = "gate.gateHandler.queryEntry";
+    json_t *msg = json_object();
+
+    json_object_set(msg, "uid", json_integer(global_count));
+    CCPomelo::getInstance()->request(route, msg, this,  callfuncND_selector(HelloWorld::queryEntryCB));
+}
 void HelloWorld::queryEntryCB(cocos2d::CCNode *node, void *resp){
     CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
     CCLOG("queryEntry %s",json_dumps(ccpomeloresp->docs,JSON_COMPACT));
@@ -104,11 +133,13 @@ void HelloWorld::queryEntryCB(cocos2d::CCNode *node, void *resp){
         if (CCPomelo::getInstance()->connect(host, port)) {
            
         }else{
-            const char *route = "connector.entryHandler.enter";
+            std::string route = "connector.entryHandler.enter";
             json_t *msg = json_object();
             json_object_set(msg, "rid", json_string("1"));
-            json_object_set(msg, "username", json_string("username"));
-            CCPomelo::getInstance()->request(route, msg, this,  callfuncND_selector(HelloWorld::entryCB));
+            char temp[64]={0};
+            sprintf(temp, "username_%d",global_count);
+            json_object_set(msg, "username", json_string(temp));
+            CCPomelo::getInstance()->request(route.c_str(), msg, this,  callfuncND_selector(HelloWorld::entryCB));
         }
     }
 }
@@ -133,19 +164,10 @@ void HelloWorld::sendCB(cocos2d::CCNode *node, void *resp){
 void HelloWorld::onChat(cocos2d::CCNode *node, void *resp){
     CCPomeloReponse*ccpomeloresp = (CCPomeloReponse*)resp;
     CCLOG("onChat %s",json_dumps(ccpomeloresp->docs,JSON_COMPACT));
-    
 }
-
-
 
 void HelloWorld::menuCloseCallback(CCObject* pSender)
 {
-#if (CC_TARGET_PLATFORM == CC_PLATFORM_WINRT) || (CC_TARGET_PLATFORM == CC_PLATFORM_WP8)
-	CCMessageBox("You pressed the close button. Windows Store Apps do not implement a close button.","Alert");
-#else
-    CCDirector::sharedDirector()->end();
-#if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS)
-    exit(0);
-#endif
-#endif
+    CCPomelo::getInstance()->cleanup();
+    CCDirector::sharedDirector()->replaceScene(HelloWorld::scene());
 }

@@ -46,10 +46,17 @@ public:
     int request(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int notify(const char*route,json_t *msg,CCObject* pTarget, SEL_CallFuncND pSelector);
     int addListener(const char* event,CCObject* pTarget, SEL_CallFuncND pSelector);
-    
+    void removeListener(const char* event);
+
 public:
     CCPomelo();
     virtual ~CCPomelo();
+    
+    void cleanup();
+    
+    void cleanupEventContent();
+    void cleanupNotifyContent();
+    void cleanupRequestContent();
     
     void dispatchCallbacks(float delta);
     
