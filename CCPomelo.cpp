@@ -75,7 +75,9 @@ static CCPomelo *s_CCPomelo = NULL; // pointer to singleton
 
 void   cc_pomelo_on_ansync_connect_cb  (pc_connect_t* conn_req, int status){
     //CCLOG("data = %p\n", conn_req->data);
-    pc_connect_req_destroy(conn_req);
+    if (conn_req) {
+        pc_connect_req_destroy(conn_req);
+    }
     s_CCPomelo->connectCallBack(status);
 
 }
@@ -320,6 +322,7 @@ void CCPomelo::asyncConnect(const char* addr,int port,CCObject* pTarget, SEL_Cal
     if(ret) {
         CCLOG("pc_client_connect2 error:%d",errno);
         pc_client_destroy(client);
+        cc_pomelo_on_ansync_connect_cb(NULL,ret);
     }
 
 }
